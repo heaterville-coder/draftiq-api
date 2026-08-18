@@ -1,7 +1,6 @@
 const express = require('express');
 const app = express();
 
-// Handle CORS manually
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -12,20 +11,35 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Debug endpoint — remove after testing
+app.get('/debug', (_, res) => {
+  const key = process.env.ANTHROPIC_API_KEY;
+  res.json({
+    key_present: !!key,
+    key_length: key ? key.length : 0,
+    key_start: key ? key.substring(0, 10) : 'none',
+    node_env: process.env.NODE_ENV,
+    all_env_keys: Object.keys(process.env).filter(k => k.includes('ANTHROPIC'))
+  });
+});
+
 app.post('/intel', async (req, res) => {
   const { name, team, pos } = req.body;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
   console.log('Intel request for:', name, team, pos);
-  console.log('API Key present:', !!process.env.ANTHROPIC_API_KEY);
+  console.log('API Key present:', !!apiKey);
+  console.log('API Key length:', apiKey ? apiKey.length : 0);
 
   if (!name) return res.status(400).json({ error: 'Missing player name' });
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'API key not configured' });
+  if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -44,7 +58,7 @@ app.post('/intel', async (req, res) => {
     console.log('Anthropic response status:', response.status);
 
     if (data.error) {
-      console.error('Anthropic error:', data.error);
+      console.error('Anthropic error:', JSON.stringify(data.error));
       return res.status(500).json({ error: data.error.message });
     }
 
@@ -56,7 +70,6 @@ app.post('/intel', async (req, res) => {
       .replace(/```json|```/g, '')
       .trim();
 
-    console.log('Parsed text:', text.substring(0, 100));
     const intel = JSON.parse(text);
     res.json(intel);
 
